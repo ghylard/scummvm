@@ -37,6 +37,7 @@ Sound::Sound() {
 	_stream = nullptr;
 	_volume = 0xFF;
 	_fader = nullptr;
+	_subtitleOffset = 0;
 }
 
 Sound::~Sound() {
@@ -44,6 +45,9 @@ Sound::~Sound() {
 }
 
 void Sound::disposeSound() {
+	if (SubtitleManager *subtitles = getSubtitleManager())
+		subtitles->detach(this);
+
 	stopSound();
 	delete _stream; _stream = nullptr;
 }
@@ -67,6 +71,8 @@ void Sound::initFromAIFFFile(const Common::Path &fileName) {
 		warning("AIFF stream '%s' is not seekable", fileName.toString().c_str());
 		return;
 	}
+
+	attachSubtitles(fileName);
 }
 
 void Sound::initFromQuickTime(const Common::Path &fileName) {
@@ -76,6 +82,27 @@ void Sound::initFromQuickTime(const Common::Path &fileName) {
 
 	if (!_stream)
 		warning("Failed to open QuickTime file '%s'", fileName.toString().c_str());
+	else
+		attachSubtitles(fileName);
+}
+
+void Sound::attachSubtitles(const Common::Path &fileName) {
+	if (SubtitleManager *subtitles = getSubtitleManager())
+		subtitles->attach(this, fileName, kSubtitlesInView);
+}
+
+void Sound::startSubtitles(uint32 offsetMillis) {
+	_subtitleOffset = offsetMillis;
+	if (SubtitleManager *subtitles = getSubtitleManager())
+		subtitles->started(this);
+}
+
+bool Sound::isSubtitleSourceActive() const {
+	return _stream && g_system->getMixer()->isSoundHandleActive(_handle);
+}
+
+uint32 Sound::getSubtitleSourceTime() const {
+	return _subtitleOffset + g_system->getMixer()->getSoundElapsedTime(_handle);
 }
 
 void Sound::attachFader(SoundFader *fader) {
@@ -101,6 +128,7 @@ void Sound::playSound() {
 		setVolume(_fader->getFaderValue());
 
 	g_system->getMixer()->playStream(Audio::Mixer::kPlainSoundType, &_handle, _stream, -1, _volume, 0, DisposeAfterUse::NO);
+	startSubtitles(0);
 }
 
 void Sound::loopSound() {
@@ -117,6 +145,7 @@ void Sound::loopSound() {
 		setVolume(0);
 
 	g_system->getMixer()->playStream(Audio::Mixer::kPlainSoundType, &_handle, loopStream, -1, _volume, 0, DisposeAfterUse::YES);
+	startSubtitles(0);
 }
 
 void Sound::playSoundSegment(uint32 start, uint32 end) {
@@ -128,6 +157,7 @@ void Sound::playSoundSegment(uint32 start, uint32 end) {
 	Audio::AudioStream *subStream = new Audio::SubSeekableAudioStream(_stream, Audio::Timestamp(0, start, 600), Audio::Timestamp(0, end, 600), DisposeAfterUse::NO);
 
 	g_system->getMixer()->playStream(Audio::Mixer::kPlainSoundType, &_handle, subStream, -1, _volume, 0, DisposeAfterUse::YES);
+	startSubtitles(start * 1000 / 600);
 }
 
 void Sound::stopSound() {

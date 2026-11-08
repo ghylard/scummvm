@@ -20,6 +20,7 @@ MODULE_OBJS = \
 	notification.o \
 	pegasus.o \
 	sound.o \
+	subtitles.o \
 	surface.o \
 	timers.o \
 	transition.o \

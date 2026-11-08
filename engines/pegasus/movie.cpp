@@ -43,6 +43,9 @@ Movie::~Movie() {
 // *** Make sure this will stop displaying the movie.
 
 void Movie::releaseMovie() {
+	if (SubtitleManager *subtitles = getSubtitleManager())
+		subtitles->detach(this);
+
 	if (_video) {
 		delete _video;
 		_video = nullptr;
@@ -74,6 +77,9 @@ void Movie::initFromMovieFile(const Common::Path &fileName, bool transparent) {
 		if (!_video->loadFile(Common::Path(newName)))
 			error("Could not load video '%s'", fileName.toString().c_str());
 	}
+
+	if (SubtitleManager *subtitles = getSubtitleManager())
+		subtitles->attach(this, fileName, kSubtitlesInView);
 
 	Common::Rect bounds(0, 0, _video->getWidth(), _video->getHeight());
 	sizeElement(_video->getWidth(), _video->getHeight());
@@ -177,6 +183,9 @@ void Movie::start() {
 	if (_video)
 		_video->start();
 
+	if (SubtitleManager *subtitles = getSubtitleManager())
+		subtitles->started(this);
+
 	TimeBase::start();
 }
 
@@ -234,6 +243,14 @@ void Movie::updateTime() {
 
 		_time = Common::Rational(actualTime, getScale());
 	}
+}
+
+bool Movie::isSubtitleSourceActive() const {
+	return _video && _video->isPlaying() && !_video->endOfVideo();
+}
+
+uint32 Movie::getSubtitleSourceTime() const {
+	return _video ? _video->getTime() : 0;
 }
 
 GlowingMovie::GlowingMovie(const DisplayElementID id) : Movie(id) {

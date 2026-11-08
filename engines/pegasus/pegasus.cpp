@@ -84,6 +84,7 @@ PegasusEngine::PegasusEngine(OSystem *syst, const PegasusGameDescription *gamede
 		_shellNotification(kJMPDCShellNotificationID, this), _returnHotspot(kInfoReturnSpotID), _itemDragger(this), _bigInfoMovie(kNoDisplayElement),
 		_smallInfoMovie(kNoDisplayElement) {
 	_continuePoint = nullptr;
+	_subtitles = nullptr;
 	_saveAllowed = _loadAllowed = true;
 	_saveRequested = _loadRequested = false;
 	_gameMenu = nullptr;
@@ -129,6 +130,10 @@ PegasusEngine::~PegasusEngine() {
 	InputDeviceManager::destroy();
 	GameStateManager::destroy();
 
+	// Movies and sounds still alive detach themselves only while the manager exists
+	delete _subtitles;
+	_subtitles = nullptr;
+
 	// NOTE: This must be deleted last!
 	delete _gfx;
 }
@@ -136,6 +141,7 @@ PegasusEngine::~PegasusEngine() {
 Common::Error PegasusEngine::run() {
 	setDebugger(new PegasusConsole(this));
 	_gfx = new GraphicsManager(this);
+	_subtitles = new SubtitleManager();
 	_resFork = new Common::MacResManager();
 	_cursor = new Cursor();
 	_rnd = new Common::RandomSource("Pegasus");
@@ -360,7 +366,7 @@ void PegasusEngine::runIntro() {
 
 		if (hqVideo.loadFile(_introDirectory.appendComponent("BigMovie_hq.ogg"))) {
 			hqVideo.start();
-			playMovieScaled(&hqVideo, 0, 0);
+			playMovieScaled(&hqVideo, 0, 0, _introDirectory.appendComponent("BigMovie_hq.ogg"));
 			return;
 		}
 	}
@@ -379,7 +385,7 @@ void PegasusEngine::runIntro() {
 	video->seek(Audio::Timestamp(0, 10 * 600, 600));
 	video->start();
 
-	playMovieScaled(video, 0, 0);
+	playMovieScaled(video, 0, 0, _introDirectory.appendComponent("Big Movie.movie"));
 
 	delete video;
 }
@@ -829,12 +835,14 @@ void PegasusEngine::introTimerExpired() {
 		bool skipped = false;
 
 		Video::VideoDecoder *video = nullptr;
+		Common::Path videoPath;
 
 #ifdef USE_THEORADEC
 		if (isDVD()) {
 			video = new Video::TheoraDecoder();
+			videoPath = _introDirectory.appendComponent("LilMovie_hq.ogg");
 
-			if (!video->loadFile(_introDirectory.appendComponent("LilMovie_hq.ogg"))) {
+			if (!video->loadFile(videoPath)) {
 				delete video;
 				video = nullptr;
 			}
@@ -843,7 +851,8 @@ void PegasusEngine::introTimerExpired() {
 
 		if (!video) {
 			video = new Video::QuickTimeDecoder();
-			if (!video->loadFile(_introDirectory.appendComponent("LilMovie.movie")))
+			videoPath = _introDirectory.appendComponent("LilMovie.movie");
+			if (!video->loadFile(videoPath))
 				error("Failed to load little movie");
 		}
 
@@ -855,7 +864,7 @@ void PegasusEngine::introTimerExpired() {
 		bool openAllowed = swapLoadAllowed(false);
 
 		video->start();
-		skipped = playMovieScaled(video, 0, 0);
+		skipped = playMovieScaled(video, 0, 0, videoPath);
 
 		delete video;
 
@@ -1004,30 +1013,35 @@ void PegasusEngine::doGameMenuCommand(const GameMenuCommand command) {
 				_gfx->disableErase();
 
 				Video::VideoDecoder *video = nullptr;
+				Common::Path videoPath;
 				if (GameState.getEasterEgg()) {
 #ifdef USE_THEORADEC
 					video = new Video::TheoraDecoder();
-					if (!video->loadFile(_introDirectory.appendComponent("Closing_hq2.ogg"))) {
+					videoPath = _introDirectory.appendComponent("Closing_hq2.ogg");
+					if (!video->loadFile(videoPath)) {
 						delete video;
 						video = nullptr;
 					}
 #endif
 					if (!video) {
 						video = new Video::QuickTimeDecoder();
-						if (!video->loadFile(_introDirectory.appendComponent("Closing2.movie")))
+						videoPath = _introDirectory.appendComponent("Closing2.movie");
+						if (!video->loadFile(videoPath))
 							error("Could not load alternate closing movie");
 					}
 				} else {
 #ifdef USE_THEORADEC
 					video = new Video::TheoraDecoder();
-					if (!video->loadFile(_introDirectory.appendComponent("Closing_hq1.ogg"))) {
+					videoPath = _introDirectory.appendComponent("Closing_hq1.ogg");
+					if (!video->loadFile(videoPath)) {
 						delete video;
 						video = nullptr;
 					}
 #endif
 					if (!video) {
 						video = new Video::QuickTimeDecoder();
-						if (!video->loadFile(_introDirectory.appendComponent("Closing.movie")))
+						videoPath = _introDirectory.appendComponent("Closing.movie");
+						if (!video->loadFile(videoPath))
 							error("Could not load closing movie");
 					}
 				}
@@ -1039,7 +1053,7 @@ void PegasusEngine::doGameMenuCommand(const GameMenuCommand command) {
 				uint16 y = (480 - newHeight) / 2;
 
 				video->start();
-				bool interrupted = playMovieScaled(video, x, y);
+				bool interrupted = playMovieScaled(video, x, y, videoPath);
 
 				delete video;
 
@@ -1047,21 +1061,23 @@ void PegasusEngine::doGameMenuCommand(const GameMenuCommand command) {
 					// Display new post credits movie
 #ifdef USE_THEORADEC
 					video = new Video::TheoraDecoder();
-					if (!video->loadFile(_introDirectory.appendComponent("Closing_hq3.ogg"))) {
+					videoPath = _introDirectory.appendComponent("Closing_hq3.ogg");
+					if (!video->loadFile(videoPath)) {
 						delete video;
 						video = nullptr;
 					}
 #endif
 					if (!video) {
 						video = new Video::QuickTimeDecoder();
-						if (!video->loadFile(_introDirectory.appendComponent("Closing3.movie")))
+						videoPath = _introDirectory.appendComponent("Closing3.movie");
+						if (!video->loadFile(videoPath))
 							error("Could not load closing 3 movie");
 					}
 
 					video->setVolume(MIN<uint>(getSoundFXLevel(), 0xFF));
 
 					video->start();
-					interrupted = playMovieScaled(video, 0, 0);
+					interrupted = playMovieScaled(video, 0, 0, videoPath);
 					delete video;
 				}
 
@@ -1604,15 +1620,21 @@ void PegasusEngine::jumpToNewEnvironment(const NeighborhoodID neighborhoodID, co
 	_shellNotification.setNotificationFlags(kNeedNewJumpFlag, kNeedNewJumpFlag);
 }
 
+SubtitleManager *getSubtitleManager() {
+	return g_vm ? g_vm->_subtitles : nullptr;
+}
+
 void PegasusEngine::checkFlashlight() {
 	if (_neighborhood)
 		_neighborhood->checkFlashlight();
 }
 
-bool PegasusEngine::playMovieScaled(Video::VideoDecoder *video, uint16 x, uint16 y) {
+bool PegasusEngine::playMovieScaled(Video::VideoDecoder *video, uint16 x, uint16 y, const Common::Path &subtitlePath) {
 	bool skipped = false;
 
 	assert(video->isPlaying());
+
+	DecoderSubtitleSource subtitles(video, subtitlePath, kSubtitlesFullScreen);
 
 	while (!shouldQuit() && !video->endOfVideo() && !skipped) {
 		if (video->needsUpdate()) {
@@ -1627,6 +1649,9 @@ bool PegasusEngine::playMovieScaled(Video::VideoDecoder *video, uint16 x, uint16
 				}
 			}
 		}
+
+		if (_subtitles)
+			_subtitles->update();
 
 		Input input;
 		InputDevice.getInput(input, kFilterAllInput);
@@ -2500,6 +2525,8 @@ void PegasusEngine::doSubChase() {
 	video->setEndTime(Audio::Timestamp(0, 133200, 600));
 	video->start();
 
+	DecoderSubtitleSource subtitles(video, "Images/Norad Alpha/Sub Chase Movie", kSubtitlesFullScreen);
+
 	while (!shouldQuit() && !video->endOfVideo()) {
 		if (video->needsUpdate()) {
 			const Graphics::Surface *frame = video->decodeNextFrame();
@@ -2513,6 +2540,9 @@ void PegasusEngine::doSubChase() {
 				}
 			}
 		}
+
+		if (_subtitles)
+			_subtitles->update();
 
 		InputDevice.pumpEvents();
 		_system->delayMillis(10);

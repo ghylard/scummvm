@@ -29,6 +29,7 @@
 
 #include "pegasus/elements.h"
 #include "pegasus/graphics.h"
+#include "pegasus/subtitles.h"
 #include "pegasus/transition.h"
 
 namespace Pegasus {
@@ -172,6 +173,9 @@ void GraphicsManager::updateDisplay() {
 		// Clear the dirty rect
 		_dirtyRect = Common::Rect();
 	}
+
+	if (SubtitleManager *subtitles = getSubtitleManager())
+		subtitles->update();
 
 	if (_updatesEnabled)
 		g_system->updateScreen();

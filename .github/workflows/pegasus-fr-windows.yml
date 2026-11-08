@@ -1,0 +1,81 @@
+name: Pegasus Prime FR - Windows
+
+# Builds a Windows x64 ScummVM with only the Pegasus engine (with subtitle support)
+# and publishes a ready-to-use package as a downloadable artifact.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    name: Windows x64 (Pegasus seul)
+    runs-on: windows-2025-vs2026
+    env:
+      CONFIGURATION: Release
+      PLATFORM: x64
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+      VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg_cache,readwrite
+      VCPKG_OVERLAY_PORTS: ${{ github.workspace }}/.github/vcpkg-ports
+      GIT_VCPKG_COMMIT: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install vcpkg
+        uses: lukka/run-vcpkg@v11
+        id: runvcpkg
+        with:
+          vcpkgGitCommitId: ${{ env.GIT_VCPKG_COMMIT }}
+      - name: Integrate vcpkg
+        run: |
+          ${{ steps.runvcpkg.outputs.RUNVCPKG_VCPKG_ROOT_OUT }}/vcpkg integrate install
+      - name: Restore vcpkg cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-${{ env.GIT_VCPKG_COMMIT }}-x64-windows-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ env.GIT_VCPKG_COMMIT }}-x64-windows-
+      - name: Build create_project
+        run: |
+          cd devtools/create_project/cmake
+          cmake .
+          cmake --build . -j 2
+          cd ../../../
+      - name: Call create_project
+        run: |
+          mkdir build-scummvm
+          cd build-scummvm
+          ../devtools/create_project/cmake/Debug/create_project.exe .. --msvc --vcpkg --disable-all-engines --enable-engine=pegasus
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+      - name: Install vcpkg packages
+        run: |
+          vcpkg install
+      - name: Save vcpkg cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ${{ github.workspace }}/vcpkg_cache
+          key: vcpkg-${{ env.GIT_VCPKG_COMMIT }}-x64-windows-${{ hashFiles('vcpkg.json') }}-${{ github.run_id }}
+      - name: Build scummvm
+        run: |
+          cd build-scummvm
+          msbuild scummvm.sln /m /p:VcpkgEnableManifest=true /p:BuildInParallel=true /p:Configuration=${{ env.CONFIGURATION }} /p:PreferredToolArchitecture=x64 /p:Platform=${{ env.PLATFORM }} /v:minimal
+      - name: Assemble package
+        shell: pwsh
+        run: |
+          $out = "PegasusPrime-ScummVM-FR"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item "build-scummvm/${{ env.CONFIGURATION }}x64/*.exe" $out
+          Copy-Item "${{ env.VCPKG_INSTALLED_DIR }}/x64-windows/bin/*.dll" $out
+          Copy-Item "dists/engine-data/fonts.dat" $out
+          Copy-Item "COPYING" "$out/COPYING.txt"
+          Get-ChildItem $out
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PegasusPrime-ScummVM-FR-win64
+          path: PegasusPrime-ScummVM-FR

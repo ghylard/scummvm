@@ -29,6 +29,7 @@
 
 #include "pegasus/elements.h"
 #include "pegasus/surface.h"
+#include "pegasus/subtitles.h"
 #include "video/qt_decoder.h"
 
 namespace Video {
@@ -37,7 +38,7 @@ class VideoDecoder;
 
 namespace Pegasus {
 
-class Movie : public Animation, public PixelImage {
+class Movie : public Animation, public PixelImage, public SubtitleSource {
 public:
 	Movie(const DisplayElementID);
 	~Movie() override;
@@ -68,6 +69,10 @@ public:
 
 	// *** HACK ALERT
 	Video::VideoDecoder *getMovie() { return _video; }
+
+	// SubtitleSource
+	bool isSubtitleSourceActive() const override;
+	uint32 getSubtitleSourceTime() const override;
 	void setVolume(uint16);
 
 protected:

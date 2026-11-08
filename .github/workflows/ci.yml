@@ -1,5 +1,5 @@
 name: CI
-on: [push, pull_request]
+on: [workflow_dispatch]  # disabled on this fork branch: see pegasus-fr-windows.yml
 #  schedule:
 #    - cron: '0 0-23/4 * * *'
 permissions:

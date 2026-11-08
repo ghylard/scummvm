@@ -349,6 +349,15 @@ void Caldoria::start() {
 
 				wakeModeMovie->start();
 
+				Common::Path wakeModeSubtitles = wakeModeMoviePath;
+#ifdef USE_THEORADEC
+				if (dynamic_cast<Video::TheoraDecoder *>(wakeModeMovie))
+					wakeModeSubtitles = wakeModeMoviePath.append(".ogg");
+				else
+#endif
+					wakeModeSubtitles = wakeModeMoviePath.append(".movie");
+				DecoderSubtitleSource subtitles(wakeModeMovie, wakeModeSubtitles, kSubtitlesFullScreen);
+
 				while (!_vm->shouldQuit() && !wakeModeMovie->endOfVideo()) {
 					if (wakeModeMovie->needsUpdate()) {
 						frame = wakeModeMovie->decodeNextFrame();
@@ -358,6 +367,9 @@ void Caldoria::start() {
 							g_system->updateScreen();
 						}
 					}
+
+					if (_vm->_subtitles)
+						_vm->_subtitles->update();
 
 					InputDevice.getInput(input, kPullbackInterruptFilter);
 					if ((input.anyInput() || _vm->saveRequested() || _vm->loadRequested()) && !GameState.getEasterEgg()) {

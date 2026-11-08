@@ -39,6 +39,7 @@
 #include "pegasus/hotspot.h"
 #include "pegasus/input.h"
 #include "pegasus/notification.h"
+#include "pegasus/subtitles.h"
 #include "pegasus/timers.h"
 #include "pegasus/items/autodragger.h"
 #include "pegasus/items/inventory.h"
@@ -86,6 +87,7 @@ public:
 
 	// Base classes
 	GraphicsManager *_gfx;
+	SubtitleManager *_subtitles;
 	Common::MacResManager *_resFork;
 	Cursor *_cursor;
 
@@ -271,7 +273,7 @@ private:
 	HotspotList _allHotspots;
 	InputHandler *_savedHandler;
 	void showTempScreen(const Common::Path &fileName);
-	bool playMovieScaled(Video::VideoDecoder *video, uint16 x, uint16 y);
+	bool playMovieScaled(Video::VideoDecoder *video, uint16 x, uint16 y, const Common::Path &subtitlePath = Common::Path());
 	void throwAwayEverything();
 	void shellGameInput(const Input &input, const Hotspot *cursorSpot);
 	Common::RandomSource *_rnd;

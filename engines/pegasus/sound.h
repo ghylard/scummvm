@@ -29,6 +29,8 @@
 #include "common/str.h"
 #include "pegasus/timers.h"
 
+#include "pegasus/subtitles.h"
+
 namespace Audio {
 	class SeekableAudioStream;
 }
@@ -47,10 +49,10 @@ class SoundFader;
 // - Pan the sound
 // - Change these settings dynamically over time
 
-class Sound {
+class Sound : public SubtitleSource {
 public:
 	Sound();
-	~Sound();
+	~Sound() override;
 
 	// We only have one access point here because we should
 	// only be opening an AIFF file from a file name. We're
@@ -73,7 +75,16 @@ public:
 
 	void attachFader(SoundFader *fader);
 
+	// SubtitleSource
+	bool isSubtitleSourceActive() const override;
+	uint32 getSubtitleSourceTime() const override;
+
 protected:
+	void attachSubtitles(const Common::Path &fileName);
+	void startSubtitles(uint32 offsetMillis);
+
+	uint32 _subtitleOffset; // position in the file where playback started (ms)
+
 	Audio::SeekableAudioStream *_stream;
 	Audio::SoundHandle _handle;
 	byte _volume;
