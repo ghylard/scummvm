@@ -84,6 +84,7 @@ protected:
 	void startSubtitles(uint32 offsetMillis);
 
 	uint32 _subtitleOffset; // position in the file where playback started (ms)
+	uint32 _subtitleLoop;   // length of the file when looping (ms), 0 otherwise
 
 	Audio::SeekableAudioStream *_stream;
 	Audio::SoundHandle _handle;

@@ -38,6 +38,7 @@ Sound::Sound() {
 	_volume = 0xFF;
 	_fader = nullptr;
 	_subtitleOffset = 0;
+	_subtitleLoop = 0;
 }
 
 Sound::~Sound() {
@@ -93,6 +94,7 @@ void Sound::attachSubtitles(const Common::Path &fileName) {
 
 void Sound::startSubtitles(uint32 offsetMillis) {
 	_subtitleOffset = offsetMillis;
+	_subtitleLoop = 0;
 	if (SubtitleManager *subtitles = getSubtitleManager())
 		subtitles->started(this);
 }
@@ -102,7 +104,13 @@ bool Sound::isSubtitleSourceActive() const {
 }
 
 uint32 Sound::getSubtitleSourceTime() const {
-	return _subtitleOffset + g_system->getMixer()->getSoundElapsedTime(_handle);
+	uint32 elapsed = g_system->getMixer()->getSoundElapsedTime(_handle);
+
+	// Looping sounds (e.g. NORAD warnings): show the subtitles again on every loop
+	if (_subtitleLoop)
+		elapsed %= _subtitleLoop;
+
+	return _subtitleOffset + elapsed;
 }
 
 void Sound::attachFader(SoundFader *fader) {
@@ -146,6 +154,7 @@ void Sound::loopSound() {
 
 	g_system->getMixer()->playStream(Audio::Mixer::kPlainSoundType, &_handle, loopStream, -1, _volume, 0, DisposeAfterUse::YES);
 	startSubtitles(0);
+	_subtitleLoop = _stream->getLength().msecs();
 }
 
 void Sound::playSoundSegment(uint32 start, uint32 end) {
