@@ -22,6 +22,8 @@
 #include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/file.h"
+#include "common/fs.h"
+#include "common/archive.h"
 #include "common/system.h"
 
 #include "video/subtitles.h"
@@ -41,13 +43,22 @@ static const int kViewTop = 64;
 static const int kViewRight = 64 + 512;
 static const int kViewBottom = 64 + 256;
 
+static const char *kSubtitlesArchive = "pegasus-subtitles";
+
 SubtitleManager::SubtitleManager() : _counter(0), _shown(nullptr), _overlayW(-1), _overlayH(-1) {
 	// Enabled unless the player explicitly unticked "Subtitles" in the options
 	_enabled = !ConfMan.hasKey("subtitles") || ConfMan.getBool("subtitles");
+
+	// The game folder is only searched 4 levels deep, but subtitles of the AI clips live in
+	// Subtitles/Images/AI/<zone>/ (5 levels): register the Subtitles folder on its own.
+	Common::FSNode subtitlesDir = Common::FSNode(ConfMan.getPath("path")).getChild("Subtitles");
+	if (subtitlesDir.exists() && subtitlesDir.isDirectory())
+		SearchMan.addDirectory(kSubtitlesArchive, subtitlesDir, 0, 10);
 }
 
 SubtitleManager::~SubtitleManager() {
 	hide();
+	SearchMan.remove(kSubtitlesArchive);
 	for (uint i = 0; i < _entries.size(); i++) {
 		delete _entries[i].subs;
 		delete _entries[i].parser;
@@ -73,7 +84,8 @@ void SubtitleManager::attach(SubtitleSource *source, const Common::Path &mediaPa
 		if (name[i] == ':')
 			name.setChar('_', i);
 
-	Common::Path srtPath = Common::Path("Subtitles").join(Common::Path(name)).append(".srt");
+	// Path relative to the "Subtitles" folder registered in the constructor
+	Common::Path srtPath = Common::Path(name).append(".srt");
 
 	if (!Common::File::exists(srtPath))
 		return;
@@ -98,8 +110,10 @@ void SubtitleManager::attach(SubtitleSource *source, const Common::Path &mediaPa
 	entry.parser = parser;
 	entry.placement = placement;
 	entry.order = ++_counter;
+	entry.lines = 2;
+	entry.fontSize = 0;
 	_entries.push_back(entry);
-	layout(_entries.back(), true);
+	layout(_entries.back(), 2);
 }
 
 void SubtitleManager::detach(SubtitleSource *source) {
@@ -121,36 +135,55 @@ void SubtitleManager::started(SubtitleSource *source) {
 		entry->order = ++_counter;
 }
 
-void SubtitleManager::layout(Entry &entry, bool force) {
+void SubtitleManager::layout(Entry &entry, int lines) {
 	int16 w = g_system->getOverlayWidth();
 	int16 h = g_system->getOverlayHeight();
-
-	if (!force && w == _overlayW && h == _overlayH)
-		return;
 
 	// The 640x480 game screen is shown with its aspect ratio kept, centered in the overlay
 	float scale = MIN<float>((float)w / kScreenW, (float)h / kScreenH);
 	int offX = (int)((w - kScreenW * scale) / 2);
 	int offY = (int)((h - kScreenH * scale) / 2);
 
+	// The text is drawn from the top of the box: size the box to the number of lines
+	// of the current subtitle so that the text always hugs the bottom of the area.
+	// TrueType fonts are loaded at 96 dpi, so a line is about 1.5x the point size.
+	const int kFontSize = 12;
+	const int kLineHeight = kFontSize * 3 / 2 + 1;
+	int boxHeight = MAX(1, lines) * kLineHeight + 6;
+
 	Common::Rect r;
 	if (entry.placement == kSubtitlesInView) {
-		// Lower part of the navigation view, so that the AI and inventory areas stay visible
-		r = Common::Rect(kViewLeft + 8, kViewBottom - 74, kViewRight - 8, kViewBottom - 2);
+		// Bottom of the navigation view, so that the AI and inventory areas stay visible
+		r = Common::Rect(kViewLeft + 8, kViewBottom - 4 - boxHeight, kViewRight - 8, kViewBottom - 4);
 	} else {
-		r = Common::Rect(24, kScreenH - 92, kScreenW - 24, kScreenH - 6);
+		r = Common::Rect(24, kScreenH - 8 - boxHeight, kScreenW - 24, kScreenH - 8);
 	}
 
 	Common::Rect bbox(offX + (int)(r.left * scale), offY + (int)(r.top * scale),
 	                  offX + (int)(r.right * scale), offY + (int)(r.bottom * scale));
 
-	int fontSize = MAX<int>(10, (int)(15 * scale));
+	int fontSize = MAX<int>(9, (int)(kFontSize * scale));
 
+	entry.lines = lines;
 	entry.subs->setBBox(bbox);
 	entry.subs->setColor(0xff, 0xff, 0xff);
 	entry.subs->setPadding(4, 2);
-	entry.subs->setFont("LiberationSans-Regular.ttf", fontSize, Video::Subtitles::kFontStyleRegular);
-	entry.subs->setFont("LiberationSans-Italic.ttf", fontSize, Video::Subtitles::kFontStyleItalic);
+
+	// Loading a TrueType font is not free: only do it when the size changes
+	if (fontSize != entry.fontSize) {
+		entry.fontSize = fontSize;
+		entry.subs->setFont("LiberationSans-Regular.ttf", fontSize, Video::Subtitles::kFontStyleRegular);
+		entry.subs->setFont("LiberationSans-Italic.ttf", fontSize, Video::Subtitles::kFontStyleItalic);
+	}
+}
+
+static int countLines(const Common::Array<Video::SubtitlePart> &parts) {
+	int lines = 1;
+	for (uint i = 0; i < parts.size(); i++)
+		for (uint j = 0; j < parts[i].text.size(); j++)
+			if (parts[i].text[j] == '\n')
+				lines++;
+	return lines;
 }
 
 void SubtitleManager::hide() {
@@ -175,10 +208,11 @@ void SubtitleManager::update() {
 	// Most recently started source that is playing AND has a line at its current time
 	Entry *best = nullptr;
 	uint32 bestTime = 0;
+	const Common::Array<Video::SubtitlePart> *bestParts = nullptr;
 	for (uint i = 0; i < _entries.size(); i++) {
 		Entry &e = _entries[i];
 		if (resized)
-			layout(e, true);
+			layout(e, e.lines);
 		if (!e.source->isSubtitleSourceActive() || (best && e.order < best->order))
 			continue;
 		uint32 time = e.source->getSubtitleSourceTime();
@@ -186,6 +220,7 @@ void SubtitleManager::update() {
 		if (parts && !parts->empty()) {
 			best = &e;
 			bestTime = time;
+			bestParts = parts;
 		}
 	}
 
@@ -197,6 +232,13 @@ void SubtitleManager::update() {
 	}
 
 	bool force = resized;
+
+	int lines = countLines(*bestParts);
+	if (lines != best->lines) {
+		layout(*best, lines);
+		force = true;
+	}
+
 	if (_shown != best->subs) {
 		hide();
 		force = true;

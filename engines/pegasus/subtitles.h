@@ -84,10 +84,12 @@ private:
 		Video::SRTParser *parser;   // to know which source has a line to show right now
 		SubtitlePlacement placement;
 		uint32 order;
+		int lines;                  // line count the box is currently sized for
+		int fontSize;               // font size currently loaded (0 = none)
 	};
 
 	Entry *find(SubtitleSource *source);
-	void layout(Entry &entry, bool force);
+	void layout(Entry &entry, int lines);
 	void hide();
 
 	Common::Array<Entry> _entries;
