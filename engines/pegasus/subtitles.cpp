@@ -156,7 +156,7 @@ void SubtitleManager::layout(Entry &entry, int lines) {
 		// Bottom of the navigation view, so that the AI and inventory areas stay visible
 		r = Common::Rect(kViewLeft + 8, kViewBottom - 4 - boxHeight, kViewRight - 8, kViewBottom - 4);
 	} else {
-		r = Common::Rect(24, kScreenH - 8 - boxHeight, kScreenW - 24, kScreenH - 8);
+		r = Common::Rect(24, kScreenH - 16 - boxHeight, kScreenW - 24, kScreenH - 16);
 	}
 
 	Common::Rect bbox(offX + (int)(r.left * scale), offY + (int)(r.top * scale),
@@ -235,6 +235,9 @@ void SubtitleManager::update() {
 
 	int lines = countLines(*bestParts);
 	if (lines != best->lines) {
+		// The box changes size: wipe what the previous (larger) box left on the overlay
+		if (_shown == best->subs)
+			hide();
 		layout(*best, lines);
 		force = true;
 	}
