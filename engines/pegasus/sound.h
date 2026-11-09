@@ -78,6 +78,7 @@ public:
 	// SubtitleSource
 	bool isSubtitleSourceActive() const override;
 	uint32 getSubtitleSourceTime() const override;
+	uint32 getSubtitleSourceStart() const override;
 
 protected:
 	void attachSubtitles(const Common::Path &fileName);

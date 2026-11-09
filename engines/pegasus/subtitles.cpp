@@ -33,6 +33,9 @@
 
 namespace Pegasus {
 
+// Lines may start up to this many ms before the segment they belong to
+static const uint32 kSegmentTolerance = 150;
+
 // Original game screen
 static const int kScreenW = 640;
 static const int kScreenH = 480;
@@ -217,6 +220,14 @@ void SubtitleManager::update() {
 			continue;
 		uint32 time = e.source->getSubtitleSourceTime();
 		const Common::Array<Video::SubtitlePart> *parts = e.parser->getSubtitleParts(time);
+
+		// Sound files made of several segments (spot sounds): a line that began
+		// clearly before the segment being played belongs to the previous segment
+		// (e.g. "Second message" must not show up with the door sound that follows).
+		uint32 start = e.source->getSubtitleSourceStart();
+		if (parts && start > kSegmentTolerance && e.parser->getSubtitleParts(start - kSegmentTolerance) == parts)
+			parts = nullptr;
+
 		if (parts && !parts->empty()) {
 			best = &e;
 			bestTime = time;

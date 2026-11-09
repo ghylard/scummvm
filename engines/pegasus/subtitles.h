@@ -58,6 +58,8 @@ public:
 	virtual bool isSubtitleSourceActive() const = 0;
 	/** Current position in the media file, in milliseconds. */
 	virtual uint32 getSubtitleSourceTime() const = 0;
+	/** Where playback of the current segment started in the file, in milliseconds. */
+	virtual uint32 getSubtitleSourceStart() const { return 0; }
 };
 
 class SubtitleManager {

@@ -113,6 +113,10 @@ uint32 Sound::getSubtitleSourceTime() const {
 	return _subtitleOffset + elapsed;
 }
 
+uint32 Sound::getSubtitleSourceStart() const {
+	return _subtitleOffset;
+}
+
 void Sound::attachFader(SoundFader *fader) {
 	if (_fader)
 		_fader->attachSound(nullptr);
